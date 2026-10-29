@@ -79,11 +79,13 @@ export default function App() {
   const stop = useCallback(() => {
     stopMic();
     const sock = socketRef.current;
-    if (sock) {
-      sock.send({ type: "session.stop" });
-      sock.close();
-    }
-    socketRef.current = null;
+    if (!sock) return;
+    // Send session.stop and let the server emit `status: stopped` and close
+    // the socket. Our WebSocket's onclose handler will flip wsStatus → closed
+    // and null out the internal ws. We DO NOT call sock.close() here — that
+    // caused a race where the browser's close frame beat the server's stop
+    // reply, triggering a WebSocketDisconnected in the backend.
+    sock.send({ type: "session.stop" });
   }, [stopMic]);
 
   // Start/stop the mic in response to backend session state.

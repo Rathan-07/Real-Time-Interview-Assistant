@@ -97,7 +97,13 @@ async def _handle_text(
     if isinstance(event, SessionStop):
         if session is not None:
             await session.stop()
-        await ws.close()
+        # The client often closes its side the instant it sends session.stop,
+        # so the close frame may already be in-flight when we get here.
+        # Suppress WebSocketDisconnected / RuntimeError from Starlette.
+        try:
+            await ws.close()
+        except Exception:
+            log.debug("ws.close() after session.stop raced with client close", exc_info=True)
         return None
 
     return session
