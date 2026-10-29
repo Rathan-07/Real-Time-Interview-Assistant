@@ -16,18 +16,19 @@ const WS_URL =
   (import.meta.env.VITE_WS_URL as string | undefined) ??
   "ws://localhost:8000/ws";
 
-// Pre-filled demo inputs so the recording run is one click away. User can
-// clear these any time; they live only in the browser's local state.
+// Generic sample inputs so the UI is usable at a glance. These are
+// illustrative — the user is expected to replace them with their real
+// resume and the actual job description before a serious session.
 const SAMPLE_RESUME =
-  "Software developer with 2+ years of experience in Python, FastAPI, " +
-  "AsyncIO, and React/TypeScript. Built a RAG-based job portal, an AI " +
-  "agent orchestrator, and real-time streaming prototypes. Comfortable " +
-  "with WebSockets, PostgreSQL, Docker, and Claude / Gemini APIs.";
+  "Backend engineer with experience in Python and async web services. " +
+  "Comfortable building REST and WebSocket APIs, writing unit tests, " +
+  "and integrating third-party APIs. Interested in real-time systems " +
+  "and LLM-backed product features.";
 const SAMPLE_JD =
-  "Software Developer – AI & Real-Time Systems. Build streaming, LLM-" +
-  "backed features. Must know Python, FastAPI, async I/O, WebSockets, " +
-  "React, and prompt engineering. Bonus: streaming STT, RAG, latency " +
-  "instrumentation.";
+  "Software Engineer — Real-Time & AI Systems. Build streaming, LLM-" +
+  "backed features over WebSockets. Required: strong Python or " +
+  "TypeScript, async I/O, API design, and prompt engineering. Bonus: " +
+  "streaming STT, RAG, latency instrumentation.";
 
 export default function App() {
   const [wsStatus, setWsStatus] = useState<WsStatus>("disconnected");
