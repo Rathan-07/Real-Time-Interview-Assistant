@@ -22,7 +22,11 @@ def test_question_silence_upper_bound():
         Settings(question_silence_ms=10_001)
 
 
-def test_api_keys_default_to_empty_strings():
-    s = Settings()
+def test_api_keys_default_to_empty_strings(monkeypatch):
+    # Bypass the developer's local backend/.env so the test asserts code defaults,
+    # not the user's dev environment. (Avoids leaking real keys in test output.)
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    s = Settings(_env_file=None)
     assert s.deepgram_api_key == ""
     assert s.gemini_api_key == ""

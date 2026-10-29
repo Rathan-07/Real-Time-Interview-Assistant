@@ -39,4 +39,15 @@ class ErrorEvent(BaseModel):
     message: str
 
 
-ServerEvent = Union[StatusEvent, ErrorEvent]
+class TranscriptInterim(BaseModel):
+    type: Literal["transcript.interim"] = "transcript.interim"
+    text: str
+
+
+class TranscriptFinal(BaseModel):
+    type: Literal["transcript.final"] = "transcript.final"
+    text: str
+    speech_final: bool = False
+
+
+ServerEvent = Union[StatusEvent, ErrorEvent, TranscriptInterim, TranscriptFinal]

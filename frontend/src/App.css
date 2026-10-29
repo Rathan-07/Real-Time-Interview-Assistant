@@ -151,6 +151,39 @@ button + button {
   margin: 0;
 }
 
+.transcript-final {
+  margin: 0 0 4px;
+  color: canvastext;
+  line-height: 1.5;
+}
+
+.transcript-interim {
+  margin: 0;
+  color: #9ca3af;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.pill-recording {
+  --pill-bg: #dcfce7;
+  --pill-fg: #166534;
+}
+
+.pill-prompt {
+  --pill-bg: #e5e7eb;
+  --pill-fg: #111827;
+}
+
+.pill-granted {
+  --pill-bg: #dcfce7;
+  --pill-fg: #166534;
+}
+
+.pill-denied {
+  --pill-bg: #fee2e2;
+  --pill-fg: #7f1d1d;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --border: #2e303a;

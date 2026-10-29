@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { TranscriptPanel } from "./components/TranscriptPanel";
+import { useAudioStream } from "./hooks/useAudioStream";
 import { AssistantSocket, type WsStatus } from "./services/websocket";
 import type {
   AnswerMode,
@@ -19,7 +21,22 @@ export default function App() {
   const [jd, setJd] = useState("");
   const [mode, setMode] = useState<AnswerMode>("concise");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [finals, setFinals] = useState<string[]>([]);
+  const [interim, setInterim] = useState("");
+
   const socketRef = useRef<AssistantSocket | null>(null);
+
+  const sendBinary = useCallback((blob: Blob) => {
+    socketRef.current?.sendBinary(blob);
+  }, []);
+
+  const {
+    recording: micRecording,
+    permission: micPermission,
+    error: micError,
+    start: startMic,
+    stop: stopMic,
+  } = useAudioStream({ onChunk: sendBinary });
 
   const handleEvent = useCallback((evt: ServerEvent) => {
     if (evt.type === "status") {
@@ -28,12 +45,19 @@ export default function App() {
     } else if (evt.type === "error") {
       setErrorMsg(`${evt.code}: ${evt.message}`);
       setSessionState("error");
+    } else if (evt.type === "transcript.interim") {
+      setInterim(evt.text);
+    } else if (evt.type === "transcript.final") {
+      setFinals((prev) => [...prev, evt.text]);
+      setInterim("");
     }
   }, []);
 
   const start = useCallback(() => {
     socketRef.current?.close();
     setErrorMsg(null);
+    setFinals([]);
+    setInterim("");
 
     const sock = new AssistantSocket(WS_URL, {
       onOpen: () =>
@@ -45,23 +69,49 @@ export default function App() {
         }),
       onEvent: handleEvent,
       onStatus: setWsStatus,
-      onError: () => setErrorMsg("WebSocket error — is the backend running?"),
+      onError: () =>
+        setErrorMsg("WebSocket error — is the backend running on port 8000?"),
     });
     socketRef.current = sock;
     sock.connect();
   }, [handleEvent, resume, jd, mode]);
 
   const stop = useCallback(() => {
+    stopMic();
     const sock = socketRef.current;
-    if (!sock) return;
-    sock.send({ type: "session.stop" });
-    sock.close();
+    if (sock) {
+      sock.send({ type: "session.stop" });
+      sock.close();
+    }
     socketRef.current = null;
-  }, []);
+  }, [stopMic]);
+
+  // Start/stop the mic in response to backend session state.
+  // Server-driven: we only capture audio once Deepgram is actually ready.
+  useEffect(() => {
+    if (sessionState === "listening" && !micRecording) {
+      void startMic();
+    } else if (
+      (sessionState === "stopped" ||
+        sessionState === "error" ||
+        sessionState === "idle") &&
+      micRecording
+    ) {
+      stopMic();
+    }
+  }, [sessionState, micRecording, startMic, stopMic]);
+
+  // Surface mic errors into the top-level banner.
+  useEffect(() => {
+    if (micError) setErrorMsg(micError);
+  }, [micError]);
 
   useEffect(() => {
-    return () => socketRef.current?.close();
-  }, []);
+    return () => {
+      stopMic();
+      socketRef.current?.close();
+    };
+  }, [stopMic]);
 
   const connected = wsStatus === "open";
 
@@ -72,6 +122,7 @@ export default function App() {
         <div className="status-pills">
           <StatusPill label="WS" value={wsStatus} />
           <StatusPill label="Session" value={sessionState} />
+          <StatusPill label="Mic" value={micRecording ? "recording" : micPermission} />
         </div>
       </header>
 
@@ -123,10 +174,7 @@ export default function App() {
 
       {errorMsg && <div className="error-banner">{errorMsg}</div>}
 
-      <section className="panel">
-        <h2>Transcript</h2>
-        <p className="placeholder">Live transcript renders here in Phase 2.</p>
-      </section>
+      <TranscriptPanel finals={finals} interim={interim} />
 
       <section className="panel">
         <h2>Detected question</h2>

@@ -40,4 +40,19 @@ export interface ServerErrorEvent {
   message: string;
 }
 
-export type ServerEvent = StatusEvent | ServerErrorEvent;
+export interface TranscriptInterimEvent {
+  type: "transcript.interim";
+  text: string;
+}
+
+export interface TranscriptFinalEvent {
+  type: "transcript.final";
+  text: string;
+  speech_final: boolean;
+}
+
+export type ServerEvent =
+  | StatusEvent
+  | ServerErrorEvent
+  | TranscriptInterimEvent
+  | TranscriptFinalEvent;
