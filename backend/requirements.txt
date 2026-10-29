@@ -1,2 +1,7 @@
-# Runtime dependencies — pinned ranges added in later phases as each is actually used.
-# Phase 0 keeps this empty so we don't install unverified SDK versions.
+# Runtime dependencies — pinned to versions actually installed and tested.
+# Provider SDKs (deepgram-sdk, google-genai) are added in Phase 2 / Phase 4.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+websockets==17.3
+pydantic==2.14.1
+pydantic-settings==2.16.2
