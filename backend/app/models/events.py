@@ -78,6 +78,25 @@ class AnswerComplete(BaseModel):
     id: str
 
 
+class AnswerMetrics(BaseModel):
+    """Latency numbers measured server-side with a monotonic clock.
+
+    Emitted once per completed answer. Fields are in milliseconds.
+    - `question_to_first_chunk_ms`: time from question.detected to first
+      answer.chunk — the headline "time to first token" number.
+    - `first_chunk_to_complete_ms`: streaming duration after first token.
+    - `total_ms`: convenience sum.
+    """
+
+    type: Literal["metrics"] = "metrics"
+    id: str
+    question_to_first_chunk_ms: int
+    first_chunk_to_complete_ms: int
+    total_ms: int
+    chunk_count: int
+    char_count: int
+
+
 ServerEvent = Union[
     StatusEvent,
     ErrorEvent,
@@ -86,4 +105,5 @@ ServerEvent = Union[
     QuestionDetected,
     AnswerChunk,
     AnswerComplete,
+    AnswerMetrics,
 ]

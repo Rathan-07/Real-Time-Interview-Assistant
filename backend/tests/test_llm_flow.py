@@ -165,6 +165,52 @@ def test_manual_question_bypasses_stt_and_streams_answer():
         _clear()
 
 
+def test_answer_metrics_event_emitted_with_sensible_numbers():
+    """After a complete answer, a `metrics` event must land with monotonic
+    non-negative integer durations and the right chunk/char counts."""
+    stt = FakeSTTProvider([])
+    llm = FakeLLMProvider(
+        ["hello ", "world ", "answer."],
+        per_chunk_delay_s=0.02,
+    )
+    _ovrr(stt, llm)
+    try:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "session.start"})
+            assert ws.receive_json()["state"] == "listening"
+            ws.send_json({"type": "question.manual", "text": "What is REST?"})
+
+            metrics_evt = None
+            saw_complete = False
+            for _ in range(30):
+                evt = ws.receive_json()
+                if evt["type"] == "answer.complete":
+                    saw_complete = True
+                elif evt["type"] == "metrics":
+                    metrics_evt = evt
+                    break
+            assert saw_complete
+            assert metrics_evt is not None
+            assert metrics_evt["id"].startswith("m_")
+            assert metrics_evt["chunk_count"] == 3
+            assert metrics_evt["char_count"] == len("hello world answer.")
+            assert metrics_evt["question_to_first_chunk_ms"] >= 0
+            assert metrics_evt["first_chunk_to_complete_ms"] >= 0
+            # total ≈ question_to_first_chunk + first_chunk_to_complete,
+            # allow 2 ms slop for the two separate monotonic reads.
+            delta = abs(
+                metrics_evt["total_ms"]
+                - (
+                    metrics_evt["question_to_first_chunk_ms"]
+                    + metrics_evt["first_chunk_to_complete_ms"]
+                )
+            )
+            assert delta <= 2, delta
+    finally:
+        _clear()
+
+
 def test_manual_question_before_start_errors_out():
     stt = FakeSTTProvider([])
     llm = FakeLLMProvider([])

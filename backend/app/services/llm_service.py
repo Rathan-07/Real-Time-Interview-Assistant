@@ -67,6 +67,12 @@ class GeminiStreamingProvider:
         from google import genai
         from google.genai import types
 
+        log.info(
+            "gemini: streaming (model=%s, max_tokens=%d, temp=%.2f)",
+            self._model,
+            self._max_output_tokens,
+            self._temperature,
+        )
         client = genai.Client(api_key=self._api_key)
         config = types.GenerateContentConfig(
             system_instruction=system,

@@ -22,6 +22,11 @@ from app.services.stt_service import STTProvider
 log = logging.getLogger(__name__)
 router = APIRouter()
 
+# MediaRecorder at 250 ms produces ~4-16 KB per WebM/Opus chunk. 128 KB is
+# ~10x normal and still safely under uvicorn's default WS frame limit.
+# A larger frame means the client is misbehaving or compromised; drop it.
+MAX_AUDIO_FRAME_BYTES = 128 * 1024
+
 
 @router.websocket("/ws")
 async def websocket_endpoint(
@@ -47,12 +52,20 @@ async def websocket_endpoint(
                 if session is None and ws.client_state.name == "DISCONNECTED":
                     break
             elif msg.get("bytes") is not None:
+                frame = msg["bytes"]
+                if len(frame) > MAX_AUDIO_FRAME_BYTES:
+                    log.warning(
+                        "oversized audio frame (%d bytes > %d) — dropped",
+                        len(frame),
+                        MAX_AUDIO_FRAME_BYTES,
+                    )
+                    continue
                 if session is not None:
-                    await session.feed_audio(msg["bytes"])
+                    await session.feed_audio(frame)
                 else:
                     log.debug(
                         "audio frame received before session.start (%d bytes) — dropped",
-                        len(msg["bytes"]),
+                        len(frame),
                     )
             else:
                 log.warning("unknown websocket message shape: %r", msg)

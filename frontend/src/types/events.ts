@@ -73,6 +73,16 @@ export interface AnswerCompleteEvent {
   id: string;
 }
 
+export interface AnswerMetricsEvent {
+  type: "metrics";
+  id: string;
+  question_to_first_chunk_ms: number;
+  first_chunk_to_complete_ms: number;
+  total_ms: number;
+  chunk_count: number;
+  char_count: number;
+}
+
 export type ServerEvent =
   | StatusEvent
   | ServerErrorEvent
@@ -80,4 +90,5 @@ export type ServerEvent =
   | TranscriptFinalEvent
   | QuestionDetectedEvent
   | AnswerChunkEvent
-  | AnswerCompleteEvent;
+  | AnswerCompleteEvent
+  | AnswerMetricsEvent;

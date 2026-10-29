@@ -148,6 +148,21 @@ def test_ws_binary_audio_during_session_is_accepted(with_fake_stt):
         assert ws.receive_json()["state"] == "stopped"
 
 
+def test_ws_oversized_audio_frame_dropped_without_crash(with_fake_stt):
+    """A single giant binary frame must not crash the session."""
+    from app.api.websocket import MAX_AUDIO_FRAME_BYTES
+
+    with_fake_stt([])
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "session.start"})
+        assert ws.receive_json()["state"] == "listening"
+        ws.send_bytes(b"\x00" * (MAX_AUDIO_FRAME_BYTES + 1))
+        # Session should still be alive — Stop closes cleanly.
+        ws.send_json({"type": "session.stop"})
+        assert ws.receive_json()["state"] == "stopped"
+
+
 # -------------------- question detection flow -----------------
 
 

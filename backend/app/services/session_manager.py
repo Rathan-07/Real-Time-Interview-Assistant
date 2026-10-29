@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from fastapi import WebSocket
@@ -23,6 +24,7 @@ from fastapi import WebSocket
 from app.models.events import (
     AnswerChunk,
     AnswerComplete,
+    AnswerMetrics,
     ErrorEvent,
     QuestionDetected,
     StatusEvent,
@@ -193,11 +195,18 @@ class Session:
         await self._cancel_answer()
 
         await self._send(StatusEvent(state="thinking"))
+        # Record the question-detected moment for latency measurement. We use
+        # a monotonic clock because wall-clock can jump (NTP, DST) and we only
+        # care about durations.
+        question_at = time.monotonic()
         self._answer_task = asyncio.create_task(
-            self._stream_answer(qid, text), name=f"answer-{qid}"
+            self._stream_answer(qid, text, question_at),
+            name=f"answer-{qid}",
         )
 
-    async def _stream_answer(self, qid: str, question: str) -> None:
+    async def _stream_answer(
+        self, qid: str, question: str, question_at: float
+    ) -> None:
         assert self._llm is not None
         payload = build_prompt(
             resume=self._resume,
@@ -209,17 +218,20 @@ class Session:
         wrote_any = False
         chunk_count = 0
         total_chars = 0
+        first_chunk_at: float | None = None
         try:
             async for chunk in self._llm.stream(
                 system=payload.system, user=payload.user
             ):
                 if not wrote_any:
                     wrote_any = True
+                    first_chunk_at = time.monotonic()
                     await self._send(StatusEvent(state="answering"))
                 chunk_count += 1
                 total_chars += len(chunk)
                 await self._send(AnswerChunk(id=qid, text=chunk))
 
+            complete_at = time.monotonic()
             log.info(
                 "answer %s complete: %d chunk(s), %d chars",
                 qid,
@@ -227,6 +239,22 @@ class Session:
                 total_chars,
             )
             await self._send(AnswerComplete(id=qid))
+
+            if first_chunk_at is not None:
+                await self._send(
+                    AnswerMetrics(
+                        id=qid,
+                        question_to_first_chunk_ms=int(
+                            (first_chunk_at - question_at) * 1000
+                        ),
+                        first_chunk_to_complete_ms=int(
+                            (complete_at - first_chunk_at) * 1000
+                        ),
+                        total_ms=int((complete_at - question_at) * 1000),
+                        chunk_count=chunk_count,
+                        char_count=total_chars,
+                    )
+                )
             if not self._stopped:
                 await self._send(StatusEvent(state="listening"))
         except asyncio.CancelledError:
