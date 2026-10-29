@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AnswerPanel } from "./components/AnswerPanel";
 import { DetectedQuestionPanel } from "./components/DetectedQuestionPanel";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { useAudioStream } from "./hooks/useAudioStream";
@@ -26,8 +27,16 @@ export default function App() {
   const [interim, setInterim] = useState("");
   const [questionId, setQuestionId] = useState<string | null>(null);
   const [questionText, setQuestionText] = useState<string | null>(null);
+  const [answerText, setAnswerText] = useState("");
+  const [answerStreaming, setAnswerStreaming] = useState(false);
+  const [manualText, setManualText] = useState("");
 
   const socketRef = useRef<AssistantSocket | null>(null);
+  // Mirror of `questionId` kept in a ref so chunk/complete handlers can read
+  // the active id synchronously. We used to read it inside a setState updater
+  // callback, but React StrictMode double-invokes those in dev, which caused
+  // answer chunks to be appended twice.
+  const activeQuestionIdRef = useRef<string | null>(null);
 
   const sendBinary = useCallback((blob: Blob) => {
     socketRef.current?.sendBinary(blob);
@@ -54,8 +63,23 @@ export default function App() {
       setFinals((prev) => [...prev, evt.text]);
       setInterim("");
     } else if (evt.type === "question.detected") {
+      activeQuestionIdRef.current = evt.id;
       setQuestionId(evt.id);
       setQuestionText(evt.text);
+      // Reset answer state — the previous answer (if any) is now stale.
+      setAnswerText("");
+      setAnswerStreaming(true);
+    } else if (evt.type === "answer.chunk") {
+      // Only accept chunks that belong to the currently-active question.
+      // Reading from a ref (not state) is important here: StrictMode would
+      // double-invoke a setState updater callback and duplicate the chunk.
+      if (activeQuestionIdRef.current === evt.id) {
+        setAnswerText((prev) => prev + evt.text);
+      }
+    } else if (evt.type === "answer.complete") {
+      if (activeQuestionIdRef.current === evt.id) {
+        setAnswerStreaming(false);
+      }
     }
   }, []);
 
@@ -66,6 +90,9 @@ export default function App() {
     setInterim("");
     setQuestionId(null);
     setQuestionText(null);
+    setAnswerText("");
+    setAnswerStreaming(false);
+    activeQuestionIdRef.current = null;
 
     const sock = new AssistantSocket(WS_URL, {
       onOpen: () =>
@@ -83,6 +110,18 @@ export default function App() {
     socketRef.current = sock;
     sock.connect();
   }, [handleEvent, resume, jd, mode]);
+
+  const askManual = useCallback(() => {
+    const text = manualText.trim();
+    if (!text) return;
+    const sock = socketRef.current;
+    if (!sock || wsStatus !== "open") {
+      setErrorMsg("Click Start Listening before submitting a typed question.");
+      return;
+    }
+    sock.send({ type: "question.manual", text });
+    setManualText("");
+  }, [manualText, wsStatus]);
 
   const stop = useCallback(() => {
     stopMic();
@@ -182,18 +221,37 @@ export default function App() {
         </button>
       </section>
 
+      <section className="manual-ask">
+        <input
+          type="text"
+          value={manualText}
+          onChange={(e) => setManualText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") askManual();
+          }}
+          placeholder='Type a question (bypasses mic — e.g. "Explain Python generators")'
+          disabled={!connected}
+        />
+        <button
+          type="button"
+          onClick={askManual}
+          disabled={!connected || !manualText.trim()}
+        >
+          Ask
+        </button>
+      </section>
+
       {errorMsg && <div className="error-banner">{errorMsg}</div>}
 
       <TranscriptPanel finals={finals} interim={interim} />
 
       <DetectedQuestionPanel id={questionId} text={questionText} />
 
-      <section className="panel">
-        <h2>Answer</h2>
-        <p className="placeholder">
-          Streaming Gemini answer renders here in Phase 4.
-        </p>
-      </section>
+      <AnswerPanel
+        questionId={questionId}
+        text={answerText}
+        streaming={answerStreaming}
+      />
     </main>
   );
 }

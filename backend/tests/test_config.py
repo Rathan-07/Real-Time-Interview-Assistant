@@ -4,11 +4,22 @@ from pydantic import ValidationError
 from app.core.config import Settings
 
 
-def test_defaults_do_not_require_env_vars():
-    s = Settings()
-    assert s.deepgram_model == "nova-2"
-    assert s.gemini_model == "gemini-2.0-flash"
-    assert s.question_silence_ms == 800
+def test_defaults_do_not_require_env_vars(monkeypatch):
+    # Force the test to assert code defaults, not whatever is in the
+    # developer's local backend/.env — otherwise a failing assertion dumps
+    # the entire Settings object (including real API keys) into pytest output.
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPGRAM_MODEL", raising=False)
+    monkeypatch.delenv("DEEPGRAM_LANGUAGE", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("QUESTION_SILENCE_MS", raising=False)
+    monkeypatch.delenv("FRONTEND_ORIGIN", raising=False)
+    s = Settings(_env_file=None)
+    assert s.deepgram_model == "nova-3"
+    assert s.deepgram_language == "en"
+    assert s.gemini_model == "gemini-3.6-flash"
+    assert s.question_silence_ms == 1200
     assert s.frontend_origin == "http://localhost:5173"
 
 

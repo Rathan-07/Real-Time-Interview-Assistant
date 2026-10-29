@@ -6,3 +6,4 @@ websockets==17.3
 pydantic==2.14.1
 pydantic-settings==2.16.2
 deepgram-sdk==7.16.0
+google-genai==2.34.0

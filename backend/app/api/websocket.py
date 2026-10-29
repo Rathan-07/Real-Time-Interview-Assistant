@@ -6,14 +6,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from app.core.deps import get_stt_provider
+from app.core.deps import get_llm_provider, get_stt_provider
 from app.models.events import (
     ErrorEvent,
+    QuestionManual,
     SessionStart,
     SessionStop,
     StatusEvent,
     client_event_adapter,
 )
+from app.services.llm_service import LLMProvider
 from app.services.session_manager import Session
 from app.services.stt_service import STTProvider
 
@@ -25,6 +27,7 @@ router = APIRouter()
 async def websocket_endpoint(
     ws: WebSocket,
     stt_provider: Optional[STTProvider] = Depends(get_stt_provider),
+    llm_provider: Optional[LLMProvider] = Depends(get_llm_provider),
 ) -> None:
     await ws.accept()
     await _send(ws, StatusEvent(state="idle", message="connected"))
@@ -38,8 +41,9 @@ async def websocket_endpoint(
                 break
 
             if msg.get("text") is not None:
-                session = await _handle_text(ws, msg["text"], session, stt_provider)
-                # After a session.stop handler closes the socket, bail out.
+                session = await _handle_text(
+                    ws, msg["text"], session, stt_provider, llm_provider
+                )
                 if session is None and ws.client_state.name == "DISCONNECTED":
                     break
             elif msg.get("bytes") is not None:
@@ -64,6 +68,7 @@ async def _handle_text(
     raw: str,
     session: Session | None,
     stt_provider: Optional[STTProvider],
+    llm_provider: Optional[LLMProvider],
 ) -> Session | None:
     try:
         event = client_event_adapter.validate_json(raw)
@@ -74,7 +79,6 @@ async def _handle_text(
 
     if isinstance(event, SessionStart):
         if session is not None:
-            # Idempotent-ish: don't start twice.
             return session
         if stt_provider is None:
             await _send(
@@ -87,24 +91,55 @@ async def _handle_text(
             await _send(ws, StatusEvent(state="error"))
             return None
 
-        new_session = Session(ws, stt_provider)
-        ok = await new_session.start()
+        # Warn about missing LLM BEFORE starting the STT session so the event
+        # ordering is deterministic (warning first, then listening, then any
+        # transcripts). Posting it after start() races with the first
+        # transcript event from the provider.
+        if llm_provider is None:
+            await _send(
+                ws,
+                ErrorEvent(
+                    code="llm_not_configured",
+                    message=(
+                        "Gemini API key is not set — transcript and question "
+                        "detection will work, but answers will not be streamed."
+                    ),
+                ),
+            )
+
+        new_session = Session(ws, stt_provider, llm_provider)
+        ok = await new_session.start(
+            resume=event.resume,
+            job_description=event.job_description,
+            mode=event.mode,
+        )
         if not ok:
             await _send(ws, StatusEvent(state="error"))
             return None
+
         return new_session
 
     if isinstance(event, SessionStop):
         if session is not None:
             await session.stop()
-        # The client often closes its side the instant it sends session.stop,
-        # so the close frame may already be in-flight when we get here.
-        # Suppress WebSocketDisconnected / RuntimeError from Starlette.
         try:
             await ws.close()
         except Exception:
             log.debug("ws.close() after session.stop raced with client close", exc_info=True)
         return None
+
+    if isinstance(event, QuestionManual):
+        if session is None:
+            await _send(
+                ws,
+                ErrorEvent(
+                    code="not_started",
+                    message="Start a session before submitting a manual question.",
+                ),
+            )
+            return None
+        await session.ask_manual(event.text)
+        return session
 
     return session
 

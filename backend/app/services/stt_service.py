@@ -56,10 +56,17 @@ class STTProvider(Protocol):
 class DeepgramLiveProvider:
     """Thin wrapper around deepgram-sdk v7's AsyncDeepgramClient."""
 
-    def __init__(self, api_key: str, model: str, interim_silence_ms: int) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        interim_silence_ms: int,
+        language: str = "en",
+    ) -> None:
         self._api_key = api_key
         self._model = model
         self._silence_ms = interim_silence_ms
+        self._language = language
 
     @asynccontextmanager
     async def open(
@@ -68,26 +75,51 @@ class DeepgramLiveProvider:
         # Imports deferred so tests that only use FakeSTT don't need the SDK.
         from deepgram import AsyncDeepgramClient
         from deepgram.listen.v1.types.listen_v1results import ListenV1Results
+        from deepgram.listen.v1.types.listen_v1utterance_end import (
+            ListenV1UtteranceEnd,
+        )
 
+        log.info(
+            "deepgram: opening session (model=%s, language=%s, endpointing=%dms)",
+            self._model,
+            self._language,
+            self._silence_ms,
+        )
         client = AsyncDeepgramClient(api_key=self._api_key)
 
         async with client.listen.v1.connect(
             model=self._model,
+            language=self._language,
             interim_results=True,
             smart_format=True,
             punctuate=True,
-            # Deepgram's `endpointing` is ms of trailing silence that marks the
-            # end of an utterance — close enough to our question-boundary need
-            # that we reuse the same knob. Phase 3 can layer stricter logic.
+            # endpointing: ms of silence before Deepgram ends a transcript
+            # with speech_final=True on its NEXT Results message. In practice
+            # this signal is unreliable — if the client stops streaming audio
+            # or the user falls silent abruptly, speech_final may never arrive.
             endpointing=self._silence_ms,
-            # No encoding/sample_rate for containerized formats (WebM/Opus):
-            # Deepgram sniffs the container header. For raw PCM we'd pass
-            # encoding="linear16" and sample_rate=16000.
+            # utterance_end_ms: Deepgram sends a SEPARATE UtteranceEnd event
+            # after this much silence, independent of Results messages. This
+            # is the deterministic end-of-utterance signal we actually trust.
+            utterance_end_ms=max(1000, self._silence_ms),
+            # No encoding/sample_rate for containerized formats (WebM/Opus).
         ) as socket:
 
             async def _pump() -> None:
                 try:
                     async for msg in socket:
+                        # UtteranceEnd is the reliable end-of-speech signal.
+                        # Emit a synthetic flush event with no new text so the
+                        # question detector collapses its buffer and decides.
+                        if isinstance(msg, ListenV1UtteranceEnd):
+                            await on_transcript(
+                                TranscriptEvent(
+                                    text="",
+                                    is_final=True,
+                                    speech_final=True,
+                                )
+                            )
+                            continue
                         if not isinstance(msg, ListenV1Results):
                             continue
                         if msg.channel is None or not msg.channel.alternatives:

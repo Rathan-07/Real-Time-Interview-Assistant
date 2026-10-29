@@ -16,7 +16,18 @@ class SessionStop(BaseModel):
     type: Literal["session.stop"] = "session.stop"
 
 
-ClientEvent = Annotated[Union[SessionStart, SessionStop], Field(discriminator="type")]
+class QuestionManual(BaseModel):
+    """Explicit question bypassing STT. Lets the UI feed a typed question
+    directly to the LLM path. Useful for demos when STT is unreliable."""
+
+    type: Literal["question.manual"] = "question.manual"
+    text: str = Field(min_length=1, max_length=2_000)
+
+
+ClientEvent = Annotated[
+    Union[SessionStart, SessionStop, QuestionManual],
+    Field(discriminator="type"),
+]
 client_event_adapter: TypeAdapter[ClientEvent] = TypeAdapter(ClientEvent)
 
 
@@ -56,10 +67,23 @@ class QuestionDetected(BaseModel):
     text: str
 
 
+class AnswerChunk(BaseModel):
+    type: Literal["answer.chunk"] = "answer.chunk"
+    id: str  # same as the question.detected id this answer belongs to
+    text: str
+
+
+class AnswerComplete(BaseModel):
+    type: Literal["answer.complete"] = "answer.complete"
+    id: str
+
+
 ServerEvent = Union[
     StatusEvent,
     ErrorEvent,
     TranscriptInterim,
     TranscriptFinal,
     QuestionDetected,
+    AnswerChunk,
+    AnswerComplete,
 ]

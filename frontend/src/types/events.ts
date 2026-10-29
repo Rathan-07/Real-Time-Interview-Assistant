@@ -24,7 +24,12 @@ export interface SessionStop {
   type: "session.stop";
 }
 
-export type ClientEvent = SessionStart | SessionStop;
+export interface QuestionManual {
+  type: "question.manual";
+  text: string;
+}
+
+export type ClientEvent = SessionStart | SessionStop | QuestionManual;
 
 // ---------- Server -> Client ----------
 
@@ -57,9 +62,22 @@ export interface QuestionDetectedEvent {
   text: string;
 }
 
+export interface AnswerChunkEvent {
+  type: "answer.chunk";
+  id: string;
+  text: string;
+}
+
+export interface AnswerCompleteEvent {
+  type: "answer.complete";
+  id: string;
+}
+
 export type ServerEvent =
   | StatusEvent
   | ServerErrorEvent
   | TranscriptInterimEvent
   | TranscriptFinalEvent
-  | QuestionDetectedEvent;
+  | QuestionDetectedEvent
+  | AnswerChunkEvent
+  | AnswerCompleteEvent;

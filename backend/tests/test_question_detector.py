@@ -148,3 +148,113 @@ def test_question_ids_increment():
     assert a is not None and b is not None
     assert a.id != b.id
     assert a.id.startswith("q_") and b.id.startswith("q_")
+
+
+# -------- real-world STT-mishearing cases (reproducing live issues) -----
+
+
+def test_mishearing_noun_phrase_does_not_fire():
+    """Deepgram once transcribed 'Explain Python generators' as
+    'In Python, Genetas.' — the detector must NOT fire on that because it
+    doesn't start with a WH/imperative and isn't question-shaped."""
+    d = QuestionDetector()
+    assert _emit_full_utterance(d, "In Python, Genetas.") is None
+
+
+def test_mishearing_short_noun_phrase_fragment_does_not_fire():
+    d = QuestionDetector()
+    assert _emit_full_utterance(d, "Python classes") is None  # no verb, no WH
+    assert _emit_full_utterance(d, "The code") is None
+
+
+def test_two_word_imperative_question_still_fires():
+    """Deepgram sometimes splits 'Explain Python generators' into two
+    speech_final chunks. The first chunk 'Explain Python' is a 2-word
+    legitimate imperative question and should fire."""
+    d = QuestionDetector()
+    out = _emit_full_utterance(d, "Explain Python.")
+    assert out is not None
+    assert "Explain Python" in out.text
+
+
+def test_two_word_what_question_fires():
+    d = QuestionDetector()
+    out = _emit_full_utterance(d, "What's REST?")
+    assert out is not None
+
+
+# -------- punctuation fallback (speech_final sometimes never arrives) ------
+
+
+def test_sentence_punctuation_flushes_even_without_speech_final():
+    """Live bug: Deepgram sent is_final=True with trailing '.' but never a
+    speech_final=True. The detector should flush on sentence-ending
+    punctuation as a fallback."""
+    d = QuestionDetector()
+    out = d.observe(
+        "Explain Python generators.",
+        is_final=True,
+        speech_final=False,
+    )
+    assert out is not None
+    assert out.text == "Explain Python generators."
+
+
+def test_sentence_without_terminal_punct_still_buffers():
+    d = QuestionDetector()
+    out = d.observe(
+        "Explain Python generators",  # no trailing punct
+        is_final=True,
+        speech_final=False,
+    )
+    assert out is None  # keep waiting
+
+
+def test_punctuation_flush_still_rejects_non_question_shaped():
+    """Even with punctuation flush, 'Expense scopes in JavaScript.' is not
+    question-shaped so the detector must still reject it."""
+    d = QuestionDetector()
+    out = d.observe(
+        "Expense scopes in JavaScript.",
+        is_final=True,
+        speech_final=False,
+    )
+    assert out is None  # correctly rejected — not an "Explain/How/What..." sentence
+
+
+# -------- Deepgram over-eager splitting (seen live) -----
+
+
+def test_split_question_rejoins_across_chunks():
+    """Live bug: Deepgram split 'Explain scopes in JavaScript' into
+    'Explain.' + 'Scopes in JavaScript.' as two speech_final=False
+    is_final events. The detector should buffer the 1-word 'Explain.',
+    accept the second chunk, join them, strip the stray '.', and fire."""
+    d = QuestionDetector()
+    first = d.observe("Explain.", is_final=True, speech_final=False)
+    assert first is None  # 1 word → defer, do not flush yet
+    second = d.observe("Scopes in JavaScript.", is_final=True, speech_final=False)
+    assert second is not None
+    assert "Explain" in second.text
+    assert "Scopes in JavaScript" in second.text
+    # The stray '.' between the two chunks must have been stripped.
+    assert "Explain. Scopes" not in second.text
+
+
+def test_single_word_sentence_defers_until_more_arrives():
+    """If the user says only 'Explain.' once, the detector must NOT fire
+    (1 word < MIN_QUESTION_WORDS). The buffer holds it, waiting for more.
+    If no second chunk ever arrives, the session's reset() clears state."""
+    d = QuestionDetector()
+    assert d.observe("Explain.", is_final=True, speech_final=False) is None
+    # No crash, no fire. Buffer has 1 entry.
+    assert len(d._buffer) == 1  # type: ignore[attr-defined]
+
+
+def test_buffer_is_capped_to_max_chunks():
+    from app.services.question_detector import MAX_BUFFER_CHUNKS
+
+    d = QuestionDetector()
+    for i in range(MAX_BUFFER_CHUNKS + 10):
+        d.observe(f"word{i}", is_final=True, speech_final=False)
+    assert len(d._buffer) <= MAX_BUFFER_CHUNKS  # type: ignore[attr-defined]

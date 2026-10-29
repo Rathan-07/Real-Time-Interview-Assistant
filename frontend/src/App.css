@@ -102,6 +102,26 @@ select {
   gap: 10px;
 }
 
+.manual-ask {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.manual-ask input {
+  flex: 1;
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  background: canvas;
+  color: canvastext;
+}
+
+.manual-ask input:disabled {
+  opacity: 0.5;
+}
+
 button {
   font: inherit;
   padding: 8px 16px;
@@ -190,6 +210,40 @@ button + button {
   font-weight: 500;
   color: canvastext;
   line-height: 1.4;
+}
+
+.answer-text {
+  margin: 0;
+  color: canvastext;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.cursor {
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+  color: #9ca3af;
+}
+
+@keyframes blink {
+  to { visibility: hidden; }
+}
+
+.streaming-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: pulse 1.1s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 
 @media (prefers-color-scheme: dark) {

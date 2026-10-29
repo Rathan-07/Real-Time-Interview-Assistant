@@ -2,8 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.core.deps import get_stt_provider
+from app.core.deps import get_llm_provider, get_stt_provider
 from app.main import app
+from app.services.llm_service import FakeLLMProvider
 from app.services.stt_service import FakeSTTProvider, TranscriptEvent
 
 client = TestClient(app)
@@ -14,13 +15,15 @@ client = TestClient(app)
 
 @pytest.fixture
 def with_fake_stt():
-    """Override get_stt_provider so WS tests don't need Deepgram.
-
-    Each test provides its own script via the inner factory.
+    """Override both STT and LLM so tests focused on STT/question flow don't
+    accidentally hit the missing-LLM warning. LLM defaults to a Fake that
+    emits zero chunks so each question still produces answer.complete and the
+    listening-again transition, keeping behavior realistic.
     """
 
     def _install(script):
         app.dependency_overrides[get_stt_provider] = lambda: FakeSTTProvider(script)
+        app.dependency_overrides[get_llm_provider] = lambda: FakeLLMProvider([])
 
     yield _install
     app.dependency_overrides.clear()
@@ -30,6 +33,7 @@ def with_fake_stt():
 def with_no_stt():
     """Simulate 'DEEPGRAM_API_KEY not set' by returning None from the dep."""
     app.dependency_overrides[get_stt_provider] = lambda: None
+    app.dependency_overrides[get_llm_provider] = lambda: None
     yield
     app.dependency_overrides.clear()
 
