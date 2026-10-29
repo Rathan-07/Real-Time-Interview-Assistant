@@ -17,10 +17,12 @@ from fastapi import WebSocket
 
 from app.models.events import (
     ErrorEvent,
+    QuestionDetected,
     StatusEvent,
     TranscriptFinal,
     TranscriptInterim,
 )
+from app.services.question_detector import QuestionDetector
 from app.services.stt_service import STTProvider, TranscriptEvent
 
 log = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ class Session:
     def __init__(self, ws: WebSocket, stt: STTProvider) -> None:
         self._ws = ws
         self._stt = stt
+        self._detector = QuestionDetector()
         self._stop_event = asyncio.Event()
         self._ready_event = asyncio.Event()
         self._task: asyncio.Task | None = None
@@ -59,6 +62,7 @@ class Session:
         if self._stopped:
             return
         self._stopped = True
+        self._detector.reset()
         self._stop_event.set()
         if self._task is not None:
             try:
@@ -98,6 +102,15 @@ class Session:
             await self._send(
                 TranscriptFinal(text=evt.text, speech_final=evt.speech_final)
             )
+            detected = self._detector.observe(
+                text=evt.text,
+                is_final=True,
+                speech_final=evt.speech_final,
+            )
+            if detected is not None:
+                await self._send(
+                    QuestionDetected(id=detected.id, text=detected.text)
+                )
         else:
             await self._send(TranscriptInterim(text=evt.text))
 

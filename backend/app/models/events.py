@@ -50,4 +50,16 @@ class TranscriptFinal(BaseModel):
     speech_final: bool = False
 
 
-ServerEvent = Union[StatusEvent, ErrorEvent, TranscriptInterim, TranscriptFinal]
+class QuestionDetected(BaseModel):
+    type: Literal["question.detected"] = "question.detected"
+    id: str
+    text: str
+
+
+ServerEvent = Union[
+    StatusEvent,
+    ErrorEvent,
+    TranscriptInterim,
+    TranscriptFinal,
+    QuestionDetected,
+]

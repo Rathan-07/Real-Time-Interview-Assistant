@@ -184,6 +184,14 @@ button + button {
   --pill-fg: #7f1d1d;
 }
 
+.detected-question {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  color: canvastext;
+  line-height: 1.4;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --border: #2e303a;

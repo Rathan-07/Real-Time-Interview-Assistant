@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { DetectedQuestionPanel } from "./components/DetectedQuestionPanel";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { useAudioStream } from "./hooks/useAudioStream";
 import { AssistantSocket, type WsStatus } from "./services/websocket";
@@ -23,6 +24,8 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [finals, setFinals] = useState<string[]>([]);
   const [interim, setInterim] = useState("");
+  const [questionId, setQuestionId] = useState<string | null>(null);
+  const [questionText, setQuestionText] = useState<string | null>(null);
 
   const socketRef = useRef<AssistantSocket | null>(null);
 
@@ -50,6 +53,9 @@ export default function App() {
     } else if (evt.type === "transcript.final") {
       setFinals((prev) => [...prev, evt.text]);
       setInterim("");
+    } else if (evt.type === "question.detected") {
+      setQuestionId(evt.id);
+      setQuestionText(evt.text);
     }
   }, []);
 
@@ -58,6 +64,8 @@ export default function App() {
     setErrorMsg(null);
     setFinals([]);
     setInterim("");
+    setQuestionId(null);
+    setQuestionText(null);
 
     const sock = new AssistantSocket(WS_URL, {
       onOpen: () =>
@@ -178,10 +186,7 @@ export default function App() {
 
       <TranscriptPanel finals={finals} interim={interim} />
 
-      <section className="panel">
-        <h2>Detected question</h2>
-        <p className="placeholder">Detected questions render here in Phase 3.</p>
-      </section>
+      <DetectedQuestionPanel id={questionId} text={questionText} />
 
       <section className="panel">
         <h2>Answer</h2>

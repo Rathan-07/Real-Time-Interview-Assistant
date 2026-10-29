@@ -144,6 +144,67 @@ def test_ws_binary_audio_during_session_is_accepted(with_fake_stt):
         assert ws.receive_json()["state"] == "stopped"
 
 
+# -------------------- question detection flow -----------------
+
+
+def test_ws_emits_question_detected_for_complete_question(with_fake_stt):
+    with_fake_stt(
+        [
+            (
+                0.0,
+                TranscriptEvent(
+                    text="Explain Python generators and when you'd use one.",
+                    is_final=True,
+                    speech_final=True,
+                ),
+            ),
+        ]
+    )
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()  # idle
+        ws.send_json({"type": "session.start"})
+        assert ws.receive_json()["state"] == "listening"
+        final_evt = ws.receive_json()
+        assert final_evt["type"] == "transcript.final"
+        question_evt = ws.receive_json()
+        assert question_evt["type"] == "question.detected"
+        assert question_evt["id"].startswith("q_")
+        assert "generators" in question_evt["text"]
+
+
+def test_ws_does_not_emit_question_for_filler(with_fake_stt):
+    with_fake_stt(
+        [
+            (
+                0.0,
+                TranscriptEvent(
+                    text="yeah okay",
+                    is_final=True,
+                    speech_final=True,
+                ),
+            ),
+            (
+                0.02,
+                TranscriptEvent(
+                    text="Explain Python generators and when you'd use one.",
+                    is_final=True,
+                    speech_final=True,
+                ),
+            ),
+        ]
+    )
+    with client.websocket_connect("/ws") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "session.start"})
+        assert ws.receive_json()["state"] == "listening"
+        # filler -> transcript.final only, no question.detected after it
+        assert ws.receive_json()["type"] == "transcript.final"  # the "yeah okay"
+        assert ws.receive_json()["type"] == "transcript.final"  # the real one
+        q = ws.receive_json()
+        assert q["type"] == "question.detected"
+        assert "generators" in q["text"]
+
+
 # --------------------- missing key path --------------------
 
 

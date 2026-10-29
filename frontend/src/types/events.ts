@@ -51,8 +51,15 @@ export interface TranscriptFinalEvent {
   speech_final: boolean;
 }
 
+export interface QuestionDetectedEvent {
+  type: "question.detected";
+  id: string;
+  text: string;
+}
+
 export type ServerEvent =
   | StatusEvent
   | ServerErrorEvent
   | TranscriptInterimEvent
-  | TranscriptFinalEvent;
+  | TranscriptFinalEvent
+  | QuestionDetectedEvent;
