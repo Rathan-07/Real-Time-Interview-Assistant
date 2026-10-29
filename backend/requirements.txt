@@ -1,0 +1,2 @@
+# Runtime dependencies — pinned ranges added in later phases as each is actually used.
+# Phase 0 keeps this empty so we don't install unverified SDK versions.

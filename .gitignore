@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
