@@ -274,28 +274,4 @@ cd backend && .venv/bin/python scripts/check_providers.py
 Pings both Deepgram and Gemini against your actual keys, reports status
 without logging the keys themselves.
 
----
-
-## What I'd build next with another week
-
-1. **Tab / system audio capture** via `getDisplayMedia` — the actual
-   production use case. Keeps the mic path as a fallback.
-2. **Multi-provider failover.** Chain Deepgram → AssemblyAI on STT and
-   Gemini → Claude on LLM, triggered by consecutive 5xx or timeout.
-   The `Protocol` boundary is already there.
-3. **Conversation memory.** Track the last N (question, answer) pairs
-   and include them in prompt_builder for genuine follow-ups.
-4. **Latency breakdown in the UI.** Separate pills for STT latency,
-   question-detection latency, LLM time-to-first-token, and total.
-   Currently only the LLM leg is measured.
-5. **Reconnect-on-drop WebSocket** with a visible banner and audio-chunk
-   buffering so transient Wi-Fi drops don't lose a question mid-flight.
-6. **Docker Compose** for one-command local setup (backend + frontend +
-   a reverse proxy serving both over the same origin so CORS can be
-   tightened further).
-7. **End-to-end playwright test** that drives a real browser against a
-   mocked WS backend to validate the UI without needing Deepgram.
-8. **Accent / WER regression suite.** Hold a small corpus of recorded
-   questions in 5+ accents, run them through the full pipeline nightly,
-   track word error rate over time.
 
